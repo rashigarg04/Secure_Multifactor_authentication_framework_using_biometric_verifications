@@ -28,6 +28,16 @@ const userSchema = new mongoose.Schema(
     mfaEnabled: { type: Boolean, default: false },
     credentials: { type: [credentialSchema], default: [] },
 
+    // Retina verification (prototype). The template is encrypted before it is stored
+    // and is never returned by normal queries (select: false).
+    retina: {
+      enrolled: { type: Boolean, default: false },
+      template: { type: Buffer, select: false },
+      enrolledAt: { type: Date, default: null },
+      consentAt: { type: Date, default: null }, // when the user agreed to template storage
+      lastVerifiedAt: { type: Date, default: null },
+    },
+
     failedLoginAttempts: { type: Number, default: 0 },
     lockUntil: { type: Date, default: null },
     lastLoginAt: { type: Date, default: null },
@@ -41,6 +51,11 @@ userSchema.methods.isLocked = function () {
   return Boolean(this.lockUntil && this.lockUntil.getTime() > Date.now());
 };
 
+/** Number of second factors the account has (biometric devices + retina). */
+userSchema.methods.secondFactorCount = function () {
+  return this.credentials.length + (this.retina?.enrolled ? 1 : 0);
+};
+
 userSchema.methods.toSafeJSON = function () {
   return {
     id: this.id,
@@ -48,6 +63,7 @@ userSchema.methods.toSafeJSON = function () {
     username: this.username,
     mfaEnabled: this.mfaEnabled,
     deviceCount: this.credentials.length,
+    retinaEnrolled: Boolean(this.retina?.enrolled),
     createdAt: this.createdAt,
     lastLoginAt: this.lastLoginAt,
   };

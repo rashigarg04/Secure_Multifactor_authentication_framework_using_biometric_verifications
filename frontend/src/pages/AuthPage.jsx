@@ -1,4 +1,5 @@
 import {
+  Eye,
   Fingerprint,
   KeyRound,
   Loader2,
@@ -13,6 +14,7 @@ import Alert from "../components/Alert.jsx";
 import RiskBadge from "../components/RiskBadge.jsx";
 import { useAuth } from "../context/AuthContext.jsx";
 import { authApi, getErrorMessage } from "../services/api.js";
+import { retinaApi } from "../services/retina.js";
 import { authenticate, browserSupportsWebAuthn } from "../services/webauthn.js";
 
 const inputClass =
@@ -89,7 +91,7 @@ export default function AuthPage() {
       } else {
         const data = await authApi.login({ email: form.email, password: form.password });
         if (data.mfaRequired) {
-          setMfaStep({ email: data.user.email, risk: data.risk });
+          setMfaStep({ email: data.user.email, risk: data.risk, methods: data.methods });
         } else {
           setAuth(data);
         }
@@ -111,6 +113,21 @@ export default function AuthPage() {
       setError(message);
       // Password step expired (5 min): start over
       if (kind === "mfa" && /expired/i.test(message)) setMfaStep(null);
+    } finally {
+      setBusy("");
+    }
+  }
+
+  async function runRetina(file) {
+    if (!file) return;
+    setBusy("retina");
+    setError("");
+    try {
+      setAuth(await retinaApi.verify(file));
+    } catch (err) {
+      const message = getErrorMessage(err);
+      setError(message);
+      if (/expired/i.test(message)) setMfaStep(null);
     } finally {
       setBusy("");
     }
@@ -152,7 +169,7 @@ export default function AuthPage() {
                 <h2 className="text-lg font-semibold">Verify it’s you</h2>
                 <p className="text-sm text-slate-400">
                   Password accepted for <span className="text-slate-200">{mfaStep.email}</span>. Confirm
-                  with your fingerprint, face, Windows Hello or security key to finish signing in.
+                  with your second factor to finish signing in.
                 </p>
               </div>
 
@@ -171,14 +188,35 @@ export default function AuthPage() {
 
               <Alert type="error">{error}</Alert>
 
-              <SubmitButton
-                busy={busy === "mfa"}
-                icon={Fingerprint}
-                disabled={!supported || busy === "mfa"}
-                onClick={() => runBiometric("mfa", { mode: "mfa" })}
-              >
-                Verify with biometrics
-              </SubmitButton>
+              {mfaStep.methods?.webauthn && (
+                <SubmitButton
+                  busy={busy === "mfa"}
+                  icon={Fingerprint}
+                  disabled={!supported || Boolean(busy)}
+                  onClick={() => runBiometric("mfa", { mode: "mfa" })}
+                >
+                  Verify with biometrics
+                </SubmitButton>
+              )}
+
+              {mfaStep.methods?.retina && (
+                <label
+                  className={`flex w-full cursor-pointer items-center justify-center gap-2 rounded-lg border border-slate-700 bg-slate-800 px-4 py-2.5 text-sm font-medium transition hover:bg-slate-700 ${busy ? "pointer-events-none opacity-50" : ""}`}
+                >
+                  {busy === "retina" ? <Loader2 className="h-4 w-4 animate-spin" /> : <Eye className="h-4 w-4" />}
+                  {busy === "retina" ? "Checking retina…" : "Verify with a retinal photograph"}
+                  <input
+                    type="file"
+                    accept="image/jpeg,image/png"
+                    className="sr-only"
+                    aria-label="Retinal photograph"
+                    onChange={(e) => {
+                      runRetina(e.target.files?.[0]);
+                      e.target.value = ""; // lets the same file be chosen again after a failure
+                    }}
+                  />
+                </label>
+              )}
               <button onClick={cancelMfa} className="w-full text-center text-sm text-slate-400 hover:text-slate-200">
                 Cancel and use a different account
               </button>

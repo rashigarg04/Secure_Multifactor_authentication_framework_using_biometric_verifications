@@ -51,6 +51,11 @@ export const EVENT_LABELS = {
   biometric_login_failed: "Failed biometric sign-in",
   biometric_register_success: "Biometric device registered",
   biometric_register_failed: "Biometric registration failed",
+  retina_enroll_success: "Retina enrolled",
+  retina_enroll_failed: "Retina enrolment failed",
+  retina_verify_success: "Retina sign-in",
+  retina_verify_failed: "Failed retina sign-in",
+  retina_removed: "Retina template deleted",
   device_renamed: "Device renamed",
   device_removed: "Device removed",
   mfa_enabled: "MFA enabled",
@@ -63,4 +68,5 @@ export const METHOD_LABELS = {
   password: "Password only",
   biometric: "Biometric only",
   "password+biometric": "Password + biometric (MFA)",
+  "password+retina": "Password + retina (MFA)",
 };

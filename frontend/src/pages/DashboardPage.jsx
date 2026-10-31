@@ -8,15 +8,17 @@ import {
   ShieldAlert,
   ShieldCheck,
 } from "lucide-react";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import ActivityLog from "../components/ActivityLog.jsx";
 import Alert from "../components/Alert.jsx";
 import ConfirmPasswordModal from "../components/ConfirmPasswordModal.jsx";
 import DeviceList from "../components/DeviceList.jsx";
 import MfaSetupPanel from "../components/MfaSetupPanel.jsx";
+import RetinaPanel from "../components/RetinaPanel.jsx";
 import RiskBadge from "../components/RiskBadge.jsx";
 import { useAuth } from "../context/AuthContext.jsx";
 import { accountApi, getErrorMessage } from "../services/api.js";
+import { retinaApi } from "../services/retina.js";
 import { METHOD_LABELS, formatCountdown, formatDateTime } from "../utils/format.js";
 
 function Card({ title, icon: Icon, children }) {
@@ -51,6 +53,7 @@ export default function DashboardPage() {
   const [devices, setDevices] = useState([]);
   const [logs, setLogs] = useState([]);
   const [stats, setStats] = useState({ total30d: 0, failed30d: 0 });
+  const [retina, setRetina] = useState({ available: false, enrolled: false });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
@@ -58,18 +61,25 @@ export default function DashboardPage() {
   const [modal, setModal] = useState(null); // { type: "removeDevice", device } | { type: "disableMfa" }
   const [now, setNow] = useState(Date.now());
 
+  // Reloads can overlap (e.g. rename, then remove). Only the newest request may update the screen,
+  // otherwise a slow older response could overwrite fresher data.
+  const latestLoad = useRef(0);
+
   const load = useCallback(async () => {
+    const id = ++latestLoad.current;
     setLoading(true);
     try {
-      const [d, l] = await Promise.all([accountApi.devices(), accountApi.logs(50)]);
+      const [d, l, r] = await Promise.all([accountApi.devices(), accountApi.logs(50), retinaApi.status()]);
+      if (id !== latestLoad.current) return;
+      setRetina(r);
       setDevices(d.devices);
       setLogs(l.logs);
       setStats(l.stats);
       setError("");
     } catch (err) {
-      setError(getErrorMessage(err));
+      if (id === latestLoad.current) setError(getErrorMessage(err));
     } finally {
-      setLoading(false);
+      if (id === latestLoad.current) setLoading(false);
     }
   }, []);
 
@@ -117,7 +127,8 @@ export default function DashboardPage() {
   }
 
   const risk = session?.risk ?? { level: "low", score: 0, reasons: [] };
-  const mfaOn = user.mfaEnabled && devices.length > 0;
+  const hasFactor = devices.length > 0 || retina.enrolled;
+  const mfaOn = user.mfaEnabled && hasFactor;
   const methodLabel = METHOD_LABELS[session?.method] ?? session?.method ?? "—";
 
   return (
@@ -151,14 +162,14 @@ export default function DashboardPage() {
               <div>
                 <p className={`text-lg font-semibold ${mfaOn ? "text-emerald-400" : "text-amber-400"}`}>{mfaOn ? "Protected" : "Not protected"}</p>
                 <p className="text-xs text-slate-400">
-                  {devices.length === 0
-                    ? "Register a device to enable MFA"
+                  {!hasFactor
+                    ? "Register a device or enrol a retina to enable MFA"
                     : mfaOn
                       ? "Biometric check required at sign-in"
                       : "Password alone can sign in"}
                 </p>
               </div>
-              <Switch label="Toggle MFA" checked={user.mfaEnabled} disabled={toggling || devices.length === 0} onChange={toggleMfa} />
+              <Switch label="Toggle MFA" checked={user.mfaEnabled} disabled={toggling || !hasFactor} onChange={toggleMfa} />
             </div>
           </Card>
 
@@ -193,6 +204,8 @@ export default function DashboardPage() {
               <DeviceList devices={devices} onRename={renameDevice} onRemove={(device) => setModal({ type: "removeDevice", device })} />
             </div>
 
+            <RetinaPanel status={retina} onEnrolled={() => afterChange("Retina enrolled and MFA is on.")} onRemove={() => setModal({ type: "removeRetina" })} />
+
             <ActivityLog logs={logs} stats={stats} loading={loading} onRefresh={load} />
           </>
         )}
@@ -212,6 +225,18 @@ export default function DashboardPage() {
           onConfirm={async (password) => {
             await accountApi.removeDevice(modal.device.id, password);
             await afterChange(`“${modal.device.name}” removed.`);
+          }}
+        />
+      )}
+      {modal?.type === "removeRetina" && (
+        <ConfirmPasswordModal
+          title="Delete your retina template?"
+          description="The stored blood-vessel pattern will be erased. If it is your only second factor, MFA will be switched off."
+          confirmLabel="Delete template"
+          onClose={() => setModal(null)}
+          onConfirm={async (password) => {
+            await retinaApi.remove(password);
+            await afterChange("Retina template deleted.");
           }}
         />
       )}

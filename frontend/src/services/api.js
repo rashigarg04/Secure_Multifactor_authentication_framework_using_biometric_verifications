@@ -15,6 +15,7 @@ const EXPECTED_401 = [
   "/auth/logout",
   "/auth/generate-authentication-options",
   "/auth/verify-authentication",
+  "/retina/verify",
 ];
 
 api.interceptors.response.use(
@@ -36,7 +37,10 @@ export function getErrorMessage(err) {
     if (Array.isArray(data?.issues) && data.issues.length) {
       return data.issues.map((i) => `${i.field}: ${i.message}`).join(" · ");
     }
-    if (data?.error) return data.error;
+    if (data?.error) {
+      // The server includes the match score only outside production (useful for demos)
+      return typeof data.score === "number" ? `${data.error} (match score ${data.score}, needs ${data.threshold})` : data.error;
+    }
     return `Request failed (${err.response.status})`;
   }
   if (err?.code === "ERR_NETWORK" || err?.code === "ECONNABORTED") {

@@ -29,7 +29,7 @@ export async function computeRisk({ user, ip, userAgent, method }) {
     AuditLog.find({
       user: user._id,
       success: true,
-      event: { $in: ["login_success", "biometric_login_success"] },
+      event: { $in: ["login_success", "biometric_login_success", "retina_verify_success"] },
     })
       .sort({ createdAt: -1 })
       .limit(30)
@@ -37,7 +37,7 @@ export async function computeRisk({ user, ip, userAgent, method }) {
     AuditLog.countDocuments({
       user: user._id,
       success: false,
-      event: { $in: ["login_failed", "biometric_login_failed"] },
+      event: { $in: ["login_failed", "biometric_login_failed", "retina_verify_failed"] },
       createdAt: { $gte: since24h },
     }),
   ]);
@@ -61,15 +61,15 @@ export async function computeRisk({ user, ip, userAgent, method }) {
     reasons.push(`${recentFailures} failed attempt(s) in the last 24 hours`);
   }
 
-  const usedBiometric = method === "biometric" || method === "password+biometric";
-  if (!usedBiometric && user.credentials.length > 0 && !user.mfaEnabled) {
+  const usedBiometric = /biometric|retina/.test(method);
+  if (!usedBiometric && user.secondFactorCount() > 0 && !user.mfaEnabled) {
     score += 15;
     reasons.push("Biometric MFA is registered but switched off");
   }
 
   if (usedBiometric) {
     score = Math.max(0, score - 20);
-    reasons.push("Verified with a biometric authenticator");
+    reasons.push(method.includes("retina") ? "Verified with a retinal scan" : "Verified with a biometric authenticator");
   }
 
   score = Math.min(100, score);

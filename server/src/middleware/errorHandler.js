@@ -1,3 +1,4 @@
+import multer from "multer";
 import { env } from "../config/env.js";
 import { HttpError } from "../utils/httpError.js";
 
@@ -9,6 +10,11 @@ export function notFound(req, res) {
 export function errorHandler(err, req, res, _next) {
   if (err instanceof HttpError) {
     return res.status(err.status).json({ error: err.message, ...err.extra });
+  }
+  if (err instanceof multer.MulterError) {
+    return err.code === "LIMIT_FILE_SIZE"
+      ? res.status(413).json({ error: "Image is larger than 5 MB." })
+      : res.status(400).json({ error: "Upload failed: send one image in the \"image\" field." });
   }
   if (err?.type === "entity.parse.failed") {
     return res.status(400).json({ error: "Invalid JSON body" });

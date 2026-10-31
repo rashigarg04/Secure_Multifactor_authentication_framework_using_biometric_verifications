@@ -14,7 +14,7 @@ export default function ActivityLog({ logs, stats, loading, onRefresh }) {
 
   const visible = logs.filter((l) => {
     if (filter === "failed") return !l.success;
-    if (filter === "biometric") return l.event.startsWith("biometric") || l.method.includes("biometric");
+    if (filter === "biometric") return l.event.startsWith("biometric") || l.event.startsWith("retina") || /biometric|retina/.test(l.method);
     return true;
   });
 

@@ -10,6 +10,11 @@ export const AUDIT_EVENTS = [
   "biometric_login_failed",
   "biometric_register_success",
   "biometric_register_failed",
+  "retina_enroll_success",
+  "retina_enroll_failed",
+  "retina_verify_success",
+  "retina_verify_failed",
+  "retina_removed",
   "device_renamed",
   "device_removed",
   "mfa_enabled",
@@ -26,7 +31,7 @@ const auditLogSchema = new mongoose.Schema(
     success: { type: Boolean, default: true },
     ip: { type: String, default: "" },
     userAgent: { type: String, default: "", maxlength: 300 },
-    method: { type: String, default: "" }, // password | biometric | password+biometric
+    method: { type: String, default: "" }, // password | biometric | password+biometric | password+retina
     risk: {
       score: { type: Number, default: 0 },
       level: { type: String, enum: ["low", "medium", "high"], default: "low" },

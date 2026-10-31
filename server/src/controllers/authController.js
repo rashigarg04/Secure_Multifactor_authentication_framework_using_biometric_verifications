@@ -4,6 +4,7 @@ import { z } from "zod";
 import { env } from "../config/env.js";
 import { User } from "../models/User.js";
 import { HttpError } from "../utils/httpError.js";
+import { recordFailedAttempt } from "../utils/lockout.js";
 import { computeRisk } from "../utils/risk.js";
 import {
   clearAuthCookies,
@@ -95,16 +96,7 @@ export async function login(req, res) {
   const ok = await bcrypt.compare(password, user.passwordHash);
 
   if (!ok) {
-    // Atomic increment, then re-read (two simple ops work on every MongoDB-compatible server)
-    await User.updateOne({ _id: user._id }, { $inc: { failedLoginAttempts: 1 } });
-    const updated = await User.findById(user._id);
-    let locked = false;
-    if (updated.failedLoginAttempts >= env.MAX_LOGIN_ATTEMPTS) {
-      updated.failedLoginAttempts = 0;
-      updated.lockUntil = new Date(Date.now() + env.LOCKOUT_MINUTES * 60 * 1000);
-      await updated.save();
-      locked = true;
-    }
+    const { locked, retryAfterSeconds } = await recordFailedAttempt(user._id);
     await req.audit("login_failed", {
       user,
       success: false,
@@ -113,7 +105,7 @@ export async function login(req, res) {
     throw new HttpError(
       locked ? 423 : 401,
       locked ? "Account temporarily locked due to repeated failed attempts" : "Invalid email or password",
-      locked ? { retryAfterSeconds: env.LOCKOUT_MINUTES * 60 } : {}
+      locked ? { retryAfterSeconds } : {}
     );
   }
 
@@ -130,8 +122,12 @@ export async function login(req, res) {
 
   // Step-up: MFA is required if switched on, OR if the sign-in looks high-risk
   // and a biometric authenticator is available.
-  const hasDevices = user.credentials.length > 0;
-  const mfaRequired = hasDevices && (user.mfaEnabled || risk.level === "high");
+  const methods = {
+    webauthn: user.credentials.length > 0,
+    retina: Boolean(user.retina?.enrolled) && env.retinaEnabled,
+  };
+  const hasSecondFactor = methods.webauthn || methods.retina;
+  const mfaRequired = hasSecondFactor && (user.mfaEnabled || risk.level === "high");
 
   if (mfaRequired) {
     await user.save();
@@ -145,6 +141,7 @@ export async function login(req, res) {
     return res.json({
       mfaRequired: true,
       user: { email: user.email, username: user.username },
+      methods, // which second factors this account can use
       risk,
     });
   }

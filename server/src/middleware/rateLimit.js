@@ -6,7 +6,7 @@ const base = { standardHeaders: "draft-8", legacyHeaders: false };
 export const apiLimiter = rateLimit({
   ...base,
   windowMs: 15 * 60 * 1000,
-  limit: 600,
+  limit: env.isProd ? 600 : 6000, // generous in development so repeated test runs are not blocked
   message: { error: "Too many requests. Please slow down." },
 });
 

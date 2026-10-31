@@ -12,7 +12,7 @@ export const mfaToggleSchema = z.object({
 });
 
 /** Sensitive actions require the account password again (re-authentication). */
-async function confirmPassword(req, password) {
+export async function confirmPassword(req, password) {
   const user = await User.findById(req.user._id).select("+passwordHash");
   const ok = password && (await bcrypt.compare(password, user.passwordHash));
   if (!ok) {
@@ -52,7 +52,7 @@ export async function removeDevice(req, res) {
   req.user.credentials = req.user.credentials.filter((c) => c.credentialID !== req.params.id);
 
   let mfaDisabled = false;
-  if (req.user.credentials.length === 0 && req.user.mfaEnabled) {
+  if (req.user.secondFactorCount() === 0 && req.user.mfaEnabled) {
     req.user.mfaEnabled = false; // nothing left to verify with
     mfaDisabled = true;
   }
@@ -70,8 +70,8 @@ export async function setMfa(req, res) {
   const user = req.user;
 
   if (enabled) {
-    if (user.credentials.length === 0) {
-      throw new HttpError(400, "Register a biometric device before enabling MFA");
+    if (user.secondFactorCount() === 0) {
+      throw new HttpError(400, "Register a biometric device or enrol a retina before enabling MFA");
     }
   } else {
     await confirmPassword(req, password); // turning protection OFF needs the password

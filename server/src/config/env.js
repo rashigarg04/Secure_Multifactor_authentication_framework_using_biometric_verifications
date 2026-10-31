@@ -27,6 +27,21 @@ const schema = z.object({
 
   // Set to 1 when running behind a reverse proxy / load balancer (Nginx, Render, Heroku...)
   TRUST_PROXY: z.coerce.number().int().min(0).default(0),
+
+  // Retina verification (optional). Leave RETINA_SERVICE_URL empty to switch it off.
+  RETINA_SERVICE_URL: z.string().default(""),
+  RETINA_SERVICE_KEY: z.string().default(""),
+  // 64 hex characters = 32 bytes, used to encrypt stored retina templates (AES-256-GCM)
+  RETINA_TEMPLATE_KEY: z.string().default(""),
+  RETINA_THRESHOLD: z.coerce.number().min(0.2).max(0.95).default(0.5),
+}).superRefine((v, ctx) => {
+  if (!v.RETINA_SERVICE_URL) return;
+  if (v.RETINA_SERVICE_KEY.length < 16) {
+    ctx.addIssue({ code: "custom", path: ["RETINA_SERVICE_KEY"], message: "must be at least 16 characters when retina is enabled" });
+  }
+  if (!/^[0-9a-fA-F]{64}$/.test(v.RETINA_TEMPLATE_KEY)) {
+    ctx.addIssue({ code: "custom", path: ["RETINA_TEMPLATE_KEY"], message: "must be 64 hex characters when retina is enabled" });
+  }
 });
 
 const parsed = schema.safeParse(process.env);
@@ -43,4 +58,5 @@ if (!parsed.success) {
 export const env = {
   ...parsed.data,
   isProd: parsed.data.NODE_ENV === "production",
+  retinaEnabled: Boolean(parsed.data.RETINA_SERVICE_URL),
 };

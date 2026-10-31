@@ -8,6 +8,7 @@ import { errorHandler, notFound } from "./middleware/errorHandler.js";
 import { apiLimiter } from "./middleware/rateLimit.js";
 import accountRoutes from "./routes/accountRoutes.js";
 import authRoutes from "./routes/authRoutes.js";
+import retinaRoutes from "./routes/retinaRoutes.js";
 
 const app = express();
 
@@ -29,6 +30,7 @@ app.use("/api", apiLimiter);
 
 app.get("/api/health", (_req, res) => res.json({ status: "ok", time: new Date().toISOString() }));
 app.use("/api/auth", authRoutes);
+app.use("/api/retina", retinaRoutes);
 app.use("/api", accountRoutes);
 
 app.use(notFound);
